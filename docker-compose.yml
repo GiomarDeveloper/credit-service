@@ -1,0 +1,35 @@
+version: '3.9'
+
+services:
+  config-server:
+    image: config-server:latest
+    container_name: config-server
+    build:
+      context: ./config-server
+      dockerfile: Dockerfile
+    ports:
+      - "8888:8888"
+    networks:
+      - bank-net
+
+  customer-service:
+    image: customer-service:latest
+    container_name: customer-service
+    build:
+      context: ./customer-service
+      dockerfile: Dockerfile
+    depends_on:
+      - config-server
+    ports:
+      - "8083:8083"
+    environment:
+      # Usa variable para que Spring sepa dónde está el Config Server
+      - CONFIG_SERVER_URI=http://config-server:8888
+      # Define el perfil activo (opcional)
+      - SPRING_PROFILES_ACTIVE=docker
+    networks:
+      - bank-net
+
+networks:
+  bank-net:
+    driver: bridge

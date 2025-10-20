@@ -1,0 +1,594 @@
+openapi: 3.0.3
+info:
+  title: Credit Service API
+  version: 1.0.0
+  description: API para gestionar productos de crédito
+  contact:
+    name: Giomar Limo
+  license:
+    name: Apache 2.0
+servers:
+  - url: http://localhost:8083/bank/v1
+tags:
+  - name: credit-api
+    description: Operations related to credit products
+
+paths:
+  /credits:
+    get:
+      tags:
+        - credit-api
+      summary: Get all credits
+      operationId: getAll
+      parameters:
+        - name: customerId
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by customer ID
+        - name: creditType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [PRESTAMO_PERSONAL, PRESTAMO_EMPRESARIAL, TARJETA_CREDITO]
+          description: Filter by credit type
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CreditResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags:
+        - credit-api
+      summary: Create credit product
+      operationId: create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditRequest'
+        description: Credit data to create
+      responses:
+        '201':
+          description: Credit created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Business rule violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /credits/{id}:
+    get:
+      tags:
+        - credit-api
+      summary: Get credit by ID
+      operationId: getById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Credit ID
+          example: "507f1f77bcf86cd799439011"
+      responses:
+        '200':
+          description: Credit found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags:
+        - credit-api
+      summary: Update credit
+      operationId: update
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Credit ID
+          example: "507f1f77bcf86cd799439011"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditRequest'
+        description: Credit data to update
+      responses:
+        '200':
+          description: Credit updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - credit-api
+      summary: Delete credit
+      operationId: delete
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Credit ID
+          example: "507f1f77bcf86cd799439011"
+      responses:
+        '204':
+          description: Credit deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /credits/{id}/balance:
+    get:
+      tags:
+        - credit-api
+      summary: Get credit balance
+      operationId: getCreditBalance
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Credit ID
+          example: "507f1f77bcf86cd799439011"
+      responses:
+        '200':
+          description: Balance retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditBalanceResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /credits/customer/{customerId}:
+    get:
+      tags:
+        - credit-api
+      summary: Get credits by customer ID
+      operationId: getCreditsByCustomer
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Customer ID
+          example: "507f1f77bcf86cd799439011"
+      responses:
+        '200':
+          description: Credits found
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CreditResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /credits/{id}/payment:
+    post:
+      tags:
+        - credit-api
+      summary: Make a credit payment
+      operationId: makePayment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Credit ID
+          example: "507f1f77bcf86cd799439011"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+        description: Payment information
+      responses:
+        '200':
+          description: Payment processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Payment exceeds outstanding balance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /credits/{id}/consumption:
+    post:
+      tags:
+        - credit-api
+      summary: Charge consumption to credit card
+      operationId: chargeConsumption
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Credit Card ID
+          example: "507f1f77bcf86cd799439011"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsumptionRequest'
+        description: Consumption information
+      responses:
+        '200':
+          description: Consumption charged successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Consumption exceeds available credit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  schemas:
+    CreditRequest:
+      type: object
+      required:
+        - creditNumber
+        - creditType
+        - customerId
+        - amount
+        - interestRate
+      properties:
+        creditNumber:
+          type: string
+          description: Número único del producto de crédito
+          example: "CRD202400000001"
+          minLength: 10
+          maxLength: 20
+        creditType:
+          $ref: '#/components/schemas/CreditTypeEnum'
+        customerId:
+          type: string
+          description: ID del cliente titular
+          example: "507f1f77bcf86cd799439011"
+        amount:
+          type: number
+          format: double
+          minimum: 0
+          description: Monto total del crédito
+          example: 10000.00
+        interestRate:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+          description: Tasa de interés anual
+          example: 15.5
+        creditLimit:
+          type: number
+          format: double
+          minimum: 0
+          description: Límite de crédito (para tarjetas de crédito)
+          example: 5000.00
+        termMonths:
+          type: integer
+          minimum: 1
+          description: Plazo en meses (para préstamos)
+          example: 36
+        monthlyPayment:
+          type: number
+          format: double
+          minimum: 0
+          description: Pago mensual calculado
+          example: 350.75
+
+    CreditResponse:
+      type: object
+      description: Datos de respuesta de crédito
+      properties:
+        id:
+          type: string
+          description: Identificador único
+          example: "507f1f77bcf86cd799439011"
+        creditNumber:
+          type: string
+          description: Número del producto de crédito
+          example: "CRD202400000001"
+        creditType:
+          $ref: '#/components/schemas/CreditTypeEnum'
+        customerId:
+          type: string
+          description: ID del cliente titular
+          example: "507f1f77bcf86cd799439011"
+        amount:
+          type: number
+          format: double
+          description: Monto total del crédito
+          example: 10000.00
+        outstandingBalance:
+          type: number
+          format: double
+          description: Saldo pendiente
+          example: 8500.50
+        interestRate:
+          type: number
+          format: double
+          description: Tasa de interés anual
+          example: 15.5
+        creditLimit:
+          type: number
+          format: double
+          description: Límite de crédito
+          example: 5000.00
+        availableCredit:
+          type: number
+          format: double
+          description: Crédito disponible (para tarjetas)
+          example: 2500.00
+        termMonths:
+          type: integer
+          description: Plazo en meses
+          example: 36
+        monthlyPayment:
+          type: number
+          format: double
+          description: Pago mensual
+          example: 350.75
+        remainingPayments:
+          type: integer
+          description: Número de pagos restantes
+          example: 24
+        status:
+          $ref: '#/components/schemas/CreditStatusEnum'
+        createdAt:
+          type: string
+          format: date-time
+          description: Fecha y hora de creación
+          example: "2024-01-15T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Fecha y hora de última actualización
+          example: "2024-01-15T10:30:00Z"
+
+    CreditBalanceResponse:
+      type: object
+      description: Respuesta de saldo de crédito
+      properties:
+        creditId:
+          type: string
+          description: ID del crédito
+          example: "507f1f77bcf86cd799439011"
+        creditNumber:
+          type: string
+          description: Número del producto de crédito
+          example: "CRD202400000001"
+        outstandingBalance:
+          type: number
+          format: double
+          description: Saldo pendiente
+          example: 8500.50
+        availableCredit:
+          type: number
+          format: double
+          description: Crédito disponible
+          example: 2500.00
+        creditLimit:
+          type: number
+          format: double
+          description: Límite total de crédito
+          example: 5000.00
+        minimumPayment:
+          type: number
+          format: double
+          description: Pago mínimo requerido
+          example: 200.00
+        dueDate:
+          type: string
+          format: date
+          description: Fecha de vencimiento del próximo pago
+          example: "2024-02-15"
+        currency:
+          type: string
+          description: Código de moneda
+          example: "PEN"
+
+    PaymentRequest:
+      type: object
+      description: Solicitud de pago de crédito
+      required:
+        - amount
+        - paymentDate
+      properties:
+        amount:
+          type: number
+          format: double
+          minimum: 0
+          description: Monto del pago
+          example: 500.00
+        paymentDate:
+          type: string
+          format: date
+          description: Fecha del pago
+          example: "2024-01-15"
+        description:
+          type: string
+          description: Descripción del pago
+          example: "Pago mensual programado"
+
+    ConsumptionRequest:
+      type: object
+      description: Solicitud de consumo en tarjeta de crédito
+      required:
+        - amount
+        - description
+      properties:
+        amount:
+          type: number
+          format: double
+          minimum: 0
+          description: Monto del consumo
+          example: 250.75
+        description:
+          type: string
+          description: Descripción del consumo
+          example: "Compra en supermercado"
+        merchant:
+          type: string
+          description: Comercio donde se realizó el consumo
+          example: "Supermercado XYZ"
+        transactionDate:
+          type: string
+          format: date-time
+          description: Fecha y hora de la transacción
+          example: "2024-01-15T14:30:00Z"
+
+    ErrorResponse:
+      type: object
+      description: Respuesta estándar de error de API
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: Marca de tiempo del error
+          example: "2024-01-15T10:30:00Z"
+        status:
+          type: integer
+          description: Código de estado HTTP
+          example: 400
+        error:
+          type: string
+          description: Tipo de error
+          example: "Bad Request"
+        message:
+          type: string
+          description: Mensaje de error
+          example: "Error de validación en los campos"
+        path:
+          type: string
+          description: Ruta de la solicitud
+          example: "/api/v1/credits"
+        details:
+          type: object
+          description: Detalles adicionales del error
+          additionalProperties:
+            type: string
+          example: {
+            "creditNumber": "must not be blank",
+            "creditType": "must not be null"
+          }
+
+    CreditTypeEnum:
+      type: string
+      description: Tipo de producto de crédito
+      enum: [ PRESTAMO_PERSONAL, PRESTAMO_EMPRESARIAL, TARJETA_CREDITO ]
+      example: PRESTAMO_PERSONAL
+
+    CreditStatusEnum:
+      type: string
+      description: Estado del crédito
+      enum: [ ACTIVO, INACTIVO, BLOQUEADO, PAGADO, MOROSO ]
+      example: ACTIVO
+
+  responses:
+    BadRequest:
+      description: Bad Request - Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: "2024-01-15T10:30:00Z"
+            status: 400
+            error: "Bad Request"
+            message: "Error de validación en los campos"
+            path: "/api/v1/credits"
+            details:
+              creditNumber: "must not be blank"
+              creditType: "must not be null"
+    NotFound:
+      description: Not Found - Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: "2024-01-15T10:30:00Z"
+            status: 404
+            error: "Not Found"
+            message: "Credit not found with id: 507f1f77bcf86cd799439011"
+            path: "/api/v1/credits/507f1f77bcf86cd799439011"
+    InternalServerError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            timestamp: "2024-01-15T10:30:00Z"
+            status: 500
+            error: "Internal Server Error"
+            message: "An unexpected error occurred"
+            path: "/api/v1/credits"
