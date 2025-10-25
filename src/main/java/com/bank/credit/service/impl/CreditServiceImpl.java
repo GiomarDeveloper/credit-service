@@ -1,9 +1,11 @@
 package com.bank.credit.service.impl;
 
 import com.bank.credit.client.CustomerServiceClient;
+import com.bank.credit.client.TransactionServiceClient;
 import com.bank.credit.exception.ResourceNotFoundException;
 import com.bank.credit.mapper.CreditMapper;
 import com.bank.credit.model.*;
+import com.bank.credit.model.response.Transaction;
 import com.bank.credit.repository.CreditRepository;
 import com.bank.credit.service.CreditService;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +16,13 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -23,6 +32,7 @@ public class CreditServiceImpl implements CreditService {
     private final CreditRepository creditRepository;
     private final CreditMapper creditMapper;
     private final CustomerServiceClient customerServiceClient;
+    private final TransactionServiceClient transactionServiceClient;
 
     @Override
     public Flux<CreditResponse> getAllCredits(String customerId, String creditType) {
@@ -124,13 +134,23 @@ public class CreditServiceImpl implements CreditService {
     }
 
     @Override
-    public Flux<CreditResponse> getCreditsByCustomer(String customerId) {
-        log.info("Getting credits for customer: {}", customerId);
+    public Flux<CreditResponse> getCreditsByCustomer(String customerId, CreditTypeEnum creditType) {
+        log.info("Getting credits for customer: {} with type: {}", customerId, creditType);
 
-        return creditRepository.findByCustomerId(customerId)
-                .switchIfEmpty(Mono.error(new ResourceNotFoundException("No credits found for customer: " + customerId)))
-                .map(creditMapper::toResponse)
-                .doOnComplete(() -> log.debug("Retrieved credits for customer: {}", customerId));
+        if (creditType != null) {
+            // Filtrar por customerId y creditType
+            return creditRepository.findByCustomerIdAndCreditType(customerId, creditType.toString())
+                    .switchIfEmpty(Mono.error(new ResourceNotFoundException(
+                            "No credits found for customer: " + customerId + " with type: " + creditType)))
+                    .map(creditMapper::toResponse)
+                    .doOnComplete(() -> log.debug("Retrieved credits for customer: {} with type: {}", customerId, creditType));
+        } else {
+            // Solo filtrar por customerId
+            return creditRepository.findByCustomerId(customerId)
+                    .switchIfEmpty(Mono.error(new ResourceNotFoundException("No credits found for customer: " + customerId)))
+                    .map(creditMapper::toResponse)
+                    .doOnComplete(() -> log.debug("Retrieved all credits for customer: {}", customerId));
+        }
     }
 
     @Override
@@ -215,17 +235,130 @@ public class CreditServiceImpl implements CreditService {
                 });
     }
 
+    @Override
+    public Flux<CreditDailyBalance> getCustomerCreditsWithDailyBalances(String customerId) {
+        log.info("Getting credits with daily balances for customer: {}", customerId);
+
+        return creditRepository.findByCustomerId(customerId)
+                .flatMap(credit ->
+                        calculateRealDailyBalances(credit)
+                                .map(dailyBalances -> createCreditDailyBalance(credit, dailyBalances))
+                )
+                .onErrorResume(ex -> {
+                    log.error("Error calculating daily balances for customer {}: {}", customerId, ex.getMessage());
+                    return Flux.empty();
+                });
+    }
+
+    private Mono<List<DailyBalance>> calculateRealDailyBalances(Credit credit) {
+        return transactionServiceClient.getProductTransactionsForCurrentMonth(credit.getId(), "CREDITO")
+                .collectList()
+                .map(transactions -> calculateDailyBalancesFromTransactions(credit, transactions));
+    }
+
+    private List<DailyBalance> calculateDailyBalancesFromTransactions(Credit credit, List<Transaction> transactions) {
+        // Obtener fecha de creación del crédito USANDO ZONA HORARIA DEL SERVIDOR
+        LocalDate creditCreationDate = credit.getCreatedAt() != null ?
+                credit.getCreatedAt().atZone(ZoneId.systemDefault()).toLocalDate() :
+                LocalDate.now();
+
+        // Agrupar transacciones por día
+        Map<String, List<Transaction>> transactionsByDay = transactions.stream()
+                .filter(transaction -> transaction.getTransactionDate() != null)
+                .collect(Collectors.groupingBy(transaction -> {
+                    String dateStr = transaction.getTransactionDate();
+                    if (dateStr.length() >= 10) {
+                        return dateStr.substring(0, 10); // YYYY-MM-DD
+                    }
+                    return "unknown";
+                }));
+
+        List<DailyBalance> dailyBalances = new ArrayList<>();
+        LocalDate startOfMonth = LocalDate.now().withDayOfMonth(1);
+        LocalDate today = LocalDate.now();
+
+        // Empezar desde el balance actual
+        double runningBalance = -credit.getOutstandingBalance();
+
+        for (LocalDate date = today; !date.isBefore(startOfMonth); date = date.minusDays(1)) {
+            String dateStr = date.toString();
+            List<Transaction> dayTransactions = transactionsByDay.getOrDefault(dateStr, new ArrayList<>());
+
+            // Si el crédito no existía este día, saldo = 0
+            if (date.isBefore(creditCreationDate)) {
+                DailyBalance dailyBalance = new DailyBalance();
+                dailyBalance.setDate(date);
+                dailyBalance.setBalance(0.0);
+                dailyBalance.setTransactionsCount(0);
+                dailyBalances.add(0, dailyBalance);
+                continue;
+            }
+
+            // Revertir transacciones para calcular saldo inicial del día
+            double dayStartBalance = runningBalance;
+            for (Transaction tx : dayTransactions) {
+                if ("PAGO_CREDITO".equals(tx.getTransactionType())) {
+                    // PAGO: Revertir el pago (aumentar la deuda)
+                    dayStartBalance += tx.getAmount(); // +2000 hace la deuda más negativa
+                } else if ("CONSUMO_TARJETA".equals(tx.getTransactionType())) {
+                    // CONSUMO: Revertir el consumo (disminuir la deuda)
+                    dayStartBalance -= tx.getAmount(); // -amount hace la deuda menos negativa
+                }
+            }
+
+            DailyBalance dailyBalance = new DailyBalance();
+            dailyBalance.setDate(date);
+            dailyBalance.setBalance(dayStartBalance);
+            dailyBalance.setTransactionsCount(dayTransactions.size());
+
+            dailyBalances.add(0, dailyBalance);
+            runningBalance = dayStartBalance;
+        }
+
+        return dailyBalances;
+    }
+
+    private CreditDailyBalance createCreditDailyBalance(Credit credit, List<DailyBalance> dailyBalances) {
+        double dailyAverage = calculateDailyAverage(dailyBalances);
+
+        CreditDailyBalance response = new CreditDailyBalance();
+        response.setId(credit.getId());
+        response.setCreditNumber(credit.getCreditNumber());
+        response.setCreditType(CreditTypeEnum.valueOf(credit.getCreditType()));
+        response.setCustomerId(credit.getCustomerId());
+        response.setCurrentBalance(-credit.getOutstandingBalance());
+        response.setDailyAverage(dailyAverage);
+        response.setDailyBalances(dailyBalances);
+        return response;
+    }
+
+    private double calculateDailyAverage(List<DailyBalance> dailyBalances) {
+        if (dailyBalances == null || dailyBalances.isEmpty()) {
+            return 0.0;
+        }
+
+        double sum = dailyBalances.stream()
+                .mapToDouble(DailyBalance::getBalance)
+                .sum();
+
+        return sum / dailyBalances.size();
+    }
+
     private Mono<CreditRequest> validateBusinessRules(CreditRequest creditRequest, String customerType) {
         log.debug("Validating business rules for customer: {}, type: {}",
                 creditRequest.getCustomerId(), customerType);
 
         // 1. Validar que clientes PERSONALES no puedan tener PRESTAMO_EMPRESARIAL
-        if ("PERSONAL".equals(customerType) && "PRESTAMO_EMPRESARIAL".equals(creditRequest.getCreditType().getValue())) {
+        if (("PERSONAL".equals(customerType) && "PRESTAMO_EMPRESARIAL".equals(creditRequest.getCreditType().getValue()))
+        || ("PERSONAL_VIP".equals(customerType) && "PRESTAMO_EMPRESARIAL".equals(creditRequest.getCreditType().getValue()))
+        ) {
             return Mono.error(new IllegalArgumentException("Personal customers cannot have business loans"));
         }
 
         // 2. Validar límite de 1 préstamo personal por cliente personal
-        if ("PERSONAL".equals(customerType) && "PRESTAMO_PERSONAL".equals(creditRequest.getCreditType().getValue())) {
+        if (("PERSONAL".equals(customerType) && "PRESTAMO_PERSONAL".equals(creditRequest.getCreditType().getValue()))
+        || ("PERSONAL_VIP".equals(customerType) && "PRESTAMO_PERSONAL".equals(creditRequest.getCreditType().getValue()))
+        ) {
             return creditRepository.findByCustomerIdAndCreditType(creditRequest.getCustomerId(), "PRESTAMO_PERSONAL")
                     .hasElements()
                     .flatMap(hasExistingPersonalLoan -> {

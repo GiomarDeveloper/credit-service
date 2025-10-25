@@ -194,6 +194,13 @@ paths:
             type: string
           description: Customer ID
           example: "507f1f77bcf86cd799439011"
+        - name: creditType
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/CreditTypeEnum'
+          description: Filter by credit type
+          example: PRESTAMO_PERSONAL
       responses:
         '200':
           description: Credits found
@@ -287,6 +294,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /credits/customer/{customerId}/daily-balances:
+    get:
+      tags:
+        - credit-api
+      summary: Get customer credits with daily balances for current month
+      operationId: getCustomerCreditsWithDailyBalances
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Customer ID
+          example: "507f1f77bcf86cd799439011"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CreditDailyBalance'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -551,6 +584,35 @@ components:
       description: Estado del crédito
       enum: [ ACTIVO, INACTIVO, BLOQUEADO, PAGADO, MOROSO ]
       example: ACTIVO
+
+    CreditDailyBalance:
+      type: object
+      properties:
+        id: { type: string }
+        creditNumber: { type: string }
+        creditType: { $ref: '#/components/schemas/CreditTypeEnum' }
+        customerId: { type: string }
+        currentBalance: { type: number, format: double }
+        dailyAverage: { type: number, format: double }
+        dailyBalances:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyBalance'
+
+    DailyBalance:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2024-10-24"
+        balance:
+          type: number
+          format: double
+          example: -2500.0
+        transactionsCount:
+          type: integer
+          example: 3
 
   responses:
     BadRequest:

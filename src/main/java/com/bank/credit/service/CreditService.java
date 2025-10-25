@@ -10,8 +10,9 @@ public interface CreditService {
     Mono<CreditResponse> createCredit(CreditRequest creditRequest);
     Mono<CreditResponse> updateCredit(String id, CreditRequest creditRequest);
     Mono<Void> deleteCredit(String id);
-    Flux<CreditResponse> getCreditsByCustomer(String customerId);
+    Flux<CreditResponse> getCreditsByCustomer(String customerId, CreditTypeEnum creditType);
     Mono<CreditBalanceResponse> getCreditBalance(String id);
     Mono<CreditResponse> makePayment(String id, PaymentRequest paymentRequest);
     Mono<CreditResponse> chargeConsumption(String id, ConsumptionRequest consumptionRequest);
+    Flux<CreditDailyBalance> getCustomerCreditsWithDailyBalances(String customerId);
 }

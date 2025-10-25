@@ -60,8 +60,8 @@ public class CreditController implements CreditsApi {
     }
 
     @Override
-    public Mono<ResponseEntity<Flux<CreditResponse>>> getCreditsByCustomer(String customerId, ServerWebExchange exchange) {
-        Flux<CreditResponse> credits = creditService.getCreditsByCustomer(customerId);
+    public Mono<ResponseEntity<Flux<CreditResponse>>> getCreditsByCustomer(String customerId, CreditTypeEnum creditType, ServerWebExchange exchange) {
+        Flux<CreditResponse> credits = creditService.getCreditsByCustomer(customerId, creditType);
         return Mono.just(ResponseEntity.ok(credits));
     }
 
@@ -79,5 +79,13 @@ public class CreditController implements CreditsApi {
                 .flatMap(request -> creditService.updateCredit(id, request))
                 .map(ResponseEntity::ok)
                 .defaultIfEmpty(ResponseEntity.notFound().build());
+    }
+
+    @Override
+    public Mono<ResponseEntity<Flux<CreditDailyBalance>>> getCustomerCreditsWithDailyBalances(String customerId, ServerWebExchange exchange) {
+        Flux<CreditDailyBalance> credits = creditService
+                .getCustomerCreditsWithDailyBalances(customerId);
+
+        return Mono.just(ResponseEntity.ok(credits));
     }
 }
