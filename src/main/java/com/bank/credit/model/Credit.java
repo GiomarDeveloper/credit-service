@@ -8,6 +8,8 @@ import org.springframework.data.annotation.LastModifiedDate;
 
 import javax.validation.constraints.*;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @Builder
@@ -23,8 +25,8 @@ public class Credit {
     private String creditNumber;
 
     @NotBlank(message = "creditType is required")
-    @Pattern(regexp = "PRESTAMO_PERSONAL|PRESTAMO_EMPRESARIAL|TARJETA_CREDITO",
-            message = "creditType must be PRESTAMO_PERSONAL, PRESTAMO_EMPRESARIAL or TARJETA_CREDITO")
+    @Pattern(regexp = "PRESTAMO_PERSONAL|PRESTAMO_EMPRESARIAL|TARJETA_CREDITO|TARJETA_DEBITO",
+            message = "creditType must be PRESTAMO_PERSONAL, PRESTAMO_EMPRESARIAL, TARJETA_CREDITO or TARJETA_DEBITO")
     private String creditType;
 
     @NotBlank(message = "customerId is required")
@@ -68,4 +70,38 @@ public class Credit {
 
     @LastModifiedDate
     private Instant updatedAt;
+
+    @NotNull(message = "dueDate is required")
+    private LocalDate dueDate;
+
+    private String mainAccountId;
+
+    private List<AssociatedAccount> associatedAccounts;
+
+    @DecimalMin(value = "0.0", message = "dailyWithdrawalLimit must be greater than or equal to 0")
+    private Double dailyWithdrawalLimit;
+
+    @DecimalMin(value = "0.0", message = "dailyPurchaseLimit must be greater than or equal to 0")
+    private Double dailyPurchaseLimit;
+
+    private LocalDate expirationDate;
+
+    private String cvv;
+
+    @Pattern(regexp = "VISA|MASTERCARD", message = "cardBrand must be VISA or MASTERCARD")
+    private String cardBrand;
+
+    @Pattern(regexp = "ACTIVA|INACTIVA|BLOQUEADA|REPORTADA_ROBADA|VENCIDA",
+            message = "cardStatus must be ACTIVA, INACTIVA, BLOQUEADA, REPORTADA_ROBADA or VENCIDA")
+    private String cardStatus;
+
+    private Instant activatedAt;
+
+    @Min(value = 0, message = "dailyTransactionsCount must be greater than or equal to 0")
+    private Integer dailyTransactionsCount;
+
+    @DecimalMin(value = "0.0", message = "dailyTransactionsAmount must be greater than or equal to 0")
+    private Double dailyTransactionsAmount;
+
+    private LocalDate lastDailyReset;
 }

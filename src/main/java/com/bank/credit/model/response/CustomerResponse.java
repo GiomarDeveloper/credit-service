@@ -1,4 +1,4 @@
-package com.bank.credit.dto;
+package com.bank.credit.model.response;
 
 import lombok.Data;
 

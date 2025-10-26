@@ -1,6 +1,6 @@
 package com.bank.credit.client;
 
-import com.bank.credit.dto.CustomerResponse;
+import com.bank.credit.model.response.CustomerResponse;
 import com.bank.credit.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,5 +41,23 @@ public class CustomerServiceClient {
                 .map(CustomerResponse::getCustomerType)
                 .doOnSuccess(type -> log.debug("Customer {} type: {}", customerId, type))
                 .doOnError(error -> log.error("Error getting customer type for {}: {}", customerId, error.getMessage()));
+    }
+
+    public Mono<CustomerResponse> getCustomerById(String customerId) {
+        log.info("Getting customer by ID: {}", customerId);
+
+        return webClient.get()
+                .uri(customerServiceUrl + "/customers/{customerId}", customerId)
+                .retrieve()
+                .onStatus(status -> status.is4xxClientError(), response ->
+                        Mono.error(new ResourceNotFoundException("Customer not found with id: " + customerId))
+                )
+                .onStatus(status -> status.is5xxServerError(), response ->
+                        Mono.error(new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                                "Customer service unavailable"))
+                )
+                .bodyToMono(CustomerResponse.class)
+                .doOnSuccess(customer -> log.debug("Retrieved customer: {} {}", customer.getFirstName(), customer.getLastName()))
+                .doOnError(error -> log.error("Error getting customer by ID {}: {}", customerId, error.getMessage()));
     }
 }

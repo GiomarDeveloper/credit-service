@@ -1,6 +1,7 @@
 package com.bank.credit.controller;
 
 import com.bank.credit.api.CreditsApi;
+import com.bank.credit.exception.ResourceNotFoundException;
 import com.bank.credit.model.*;
 import com.bank.credit.service.CreditService;
 import lombok.RequiredArgsConstructor;
@@ -87,5 +88,44 @@ public class CreditController implements CreditsApi {
                 .getCustomerCreditsWithDailyBalances(customerId);
 
         return Mono.just(ResponseEntity.ok(credits));
+    }
+
+    @Override
+    public Mono<ResponseEntity<Boolean>> hasOverdueCredits(String customerId, ServerWebExchange exchange) {
+        return creditService.hasOverdueCredits(customerId)
+                .map(ResponseEntity::ok)
+                .defaultIfEmpty(ResponseEntity.ok(false));
+    }
+
+    @Override
+    public Mono<ResponseEntity<CreditResponse>> makeThirdPartyPayment(String creditId,
+                                                                      Mono<ThirdPartyPaymentRequest> thirdPartyPaymentRequest,
+                                                                      ServerWebExchange exchange) {
+        return thirdPartyPaymentRequest
+                .flatMap(request -> creditService.makeThirdPartyPayment(creditId, request))
+                .map(ResponseEntity::ok)
+                .onErrorResume(ResourceNotFoundException.class, ex -> {
+                    return Mono.just(ResponseEntity.notFound().build());
+                })
+                .onErrorResume(IllegalArgumentException.class, ex -> {
+                    return Mono.just(ResponseEntity.badRequest().build());
+                })
+                .onErrorResume(ex -> {
+                    return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
+                });
+
+    }
+
+
+    @Override
+    public Mono<ResponseEntity<DebitCardMainAccountBalanceResponse>> getDebitCardMainAccountBalance(String cardId, ServerWebExchange exchange) {
+        return creditService.getDebitCardMainAccountBalance(cardId)
+                .map(ResponseEntity::ok)
+                .onErrorResume(ResourceNotFoundException.class, ex ->
+                        Mono.just(ResponseEntity.notFound().build()))
+                .onErrorResume(IllegalArgumentException.class, ex ->
+                        Mono.just(ResponseEntity.badRequest().build()))
+                .onErrorResume(ex ->
+                        Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()));
     }
 }

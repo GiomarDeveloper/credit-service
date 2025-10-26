@@ -9,4 +9,5 @@ public interface CreditRepository extends ReactiveMongoRepository<Credit, String
     Flux<Credit> findByCreditType(String creditType);
     Flux<Credit> findByCustomerIdAndCreditType(String customerId, String creditType);
     Flux<Credit> findByStatus(String status);
+    Flux<Credit> findByCustomerIdAndStatus(String customerId, String status);
 }

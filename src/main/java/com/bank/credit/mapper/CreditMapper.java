@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 
 @Mapper(componentModel = "spring")
 public interface CreditMapper {
@@ -21,8 +22,10 @@ public interface CreditMapper {
     @Mapping(target = "status", constant = "ACTIVO")
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "associatedAccounts", source = "associatedAccounts")
     Credit toEntity(CreditRequest creditRequest);
 
+    @Mapping(target = "associatedAccounts", source = "associatedAccounts")
     CreditResponse toResponse(Credit credit);
 
     @Mapping(target = "creditId", source = "id")
@@ -30,6 +33,25 @@ public interface CreditMapper {
     @Mapping(target = "dueDate", expression = "java(calculateDueDate())")
     @Mapping(target = "currency", constant = "PEN")
     CreditBalanceResponse toBalanceResponse(Credit credit);
+
+    List<AssociatedAccount> mapAssociatedAccounts(List<CreditRequestAssociatedAccountsInner> associatedAccounts);
+
+    @Mapping(target = "associatedAt", expression = "java(java.time.LocalDate.now())")
+    @Mapping(target = "status", constant = "ACTIVA")
+    AssociatedAccount mapAssociatedAccount(CreditRequestAssociatedAccountsInner inner);
+
+    List<com.bank.credit.model.CreditResponseAssociatedAccountsInner> mapToResponseAssociatedAccounts(List<AssociatedAccount> associatedAccounts);
+
+    @Mapping(target = "associatedAt", source = "associatedAt")
+    com.bank.credit.model.CreditResponseAssociatedAccountsInner mapToResponseAssociatedAccount(AssociatedAccount associatedAccount);
+
+    default OffsetDateTime mapLocalDateToOffsetDateTime(LocalDate localDate) {
+        return localDate != null ? localDate.atStartOfDay().atOffset(ZoneOffset.UTC) : null;
+    }
+
+    default LocalDate mapOffsetDateTimeToLocalDate(OffsetDateTime offsetDateTime) {
+        return offsetDateTime != null ? offsetDateTime.toLocalDate() : null;
+    }
 
     default Double calculateMinimumPayment(Credit credit) {
         if (CreditTypeEnum.TARJETA_CREDITO.getValue().equals(credit.getCreditType())) {

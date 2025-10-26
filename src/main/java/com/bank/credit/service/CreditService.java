@@ -15,4 +15,7 @@ public interface CreditService {
     Mono<CreditResponse> makePayment(String id, PaymentRequest paymentRequest);
     Mono<CreditResponse> chargeConsumption(String id, ConsumptionRequest consumptionRequest);
     Flux<CreditDailyBalance> getCustomerCreditsWithDailyBalances(String customerId);
+    Mono<Boolean> hasOverdueCredits(String customerId);
+    Mono<CreditResponse> makeThirdPartyPayment(String creditId, ThirdPartyPaymentRequest request);
+    Mono<DebitCardMainAccountBalanceResponse> getDebitCardMainAccountBalance(String cardId);
 }

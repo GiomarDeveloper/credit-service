@@ -32,7 +32,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [PRESTAMO_PERSONAL, PRESTAMO_EMPRESARIAL, TARJETA_CREDITO]
+            enum: [PRESTAMO_PERSONAL, PRESTAMO_EMPRESARIAL, TARJETA_CREDITO, TARJETA_DEBITO]
           description: Filter by credit type
       responses:
         '200':
@@ -323,6 +323,99 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /credits/customer/{customerId}/has-overdue:
+    get:
+      tags:
+        - credit-api
+      summary: Check if customer has any overdue credits
+      operationId: hasOverdueCredits
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Customer ID
+          example: "507f1f77bcf86cd799439011"
+      responses:
+        '200':
+          description: Check completed successfully
+          content:
+            application/json:
+              schema:
+                type: boolean
+                example: true
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /credits/{creditId}/third-party-payment:
+    post:
+      tags:
+        - credit-api
+      summary: Make a payment for a credit product from a third party customer
+      operationId: makeThirdPartyPayment
+      parameters:
+        - name: creditId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Credit ID
+          example: "68fc3c992b86de614b930f61"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ThirdPartyPaymentRequest'
+      responses:
+        '200':
+          description: Third party payment processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Payment exceeds outstanding balance or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /credits/{cardId}/main-account-balance:
+    get:
+      tags:
+        - credit-api
+      summary: Get main account balance for debit card
+      operationId: getDebitCardMainAccountBalance
+      parameters:
+        - name: cardId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Debit Card ID
+          example: "507f1f77bcf86cd799439022"
+      responses:
+        '200':
+          description: Main account balance retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebitCardMainAccountBalanceResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          description: Product is not a debit card or has no main account
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
 components:
   schemas:
     CreditRequest:
@@ -333,6 +426,7 @@ components:
         - customerId
         - amount
         - interestRate
+        - dueDate
       properties:
         creditNumber:
           type: string
@@ -376,6 +470,49 @@ components:
           minimum: 0
           description: Pago mensual calculado
           example: 350.75
+        dueDate:
+          type: string
+          format: date
+          description: Fecha de vencimiento del primer pago
+          example: "2024-12-31"
+        mainAccountId:
+          type: string
+          description: ID de la cuenta principal asociada (solo para tarjetas de débito)
+          example: "507f1f77bcf86cd799439011"
+        associatedAccounts:
+          type: array
+          description: Cuentas asociadas con orden explícito
+          items:
+            type: object
+            required:
+              - accountId
+              - sequenceOrder
+            properties:
+              accountId:
+                type: string
+                example: "68fd8169bd0ed50120de03dc"
+              sequenceOrder:
+                type: integer
+                minimum: 1
+                description: Orden de prioridad (1 = primera, 2 = segunda, etc.)
+                example: 1
+        dailyWithdrawalLimit:
+          type: number
+          format: double
+          minimum: 0
+          description: Límite diario para retiros (solo para tarjetas de débito)
+          example: 1000.00
+        dailyPurchaseLimit:
+          type: number
+          format: double
+          minimum: 0
+          description: Límite diario para compras (solo para tarjetas de débito)
+          example: 5000.00
+        cardBrand:
+          type: string
+          description: Marca de la tarjeta (OBLIGATORIO para tarjetas de débito)
+          enum: [ VISA, MASTERCARD ]
+          example: "VISA"
 
     CreditResponse:
       type: object
@@ -445,6 +582,48 @@ components:
           format: date-time
           description: Fecha y hora de última actualización
           example: "2024-01-15T10:30:00Z"
+        dueDate:
+          type: string
+          format: date
+          description: Fecha de vencimiento actual
+          example: "2024-12-31"
+        mainAccountId:
+          type: string
+          description: ID de la cuenta principal asociada
+          example: "507f1f77bcf86cd799439011"
+        associatedAccounts:
+          type: array
+          items:
+            type: object
+            properties:
+              accountId:
+                type: string
+                example: "68fd8169bd0ed50120de03dc"
+              sequenceOrder:
+                type: integer
+                example: 1
+              associatedAt:
+                type: string
+                format: date-time
+                example: "2024-01-15T10:30:00Z"
+              status:
+                type: string
+                example: "ACTIVA"
+        dailyWithdrawalLimit:
+          type: number
+          format: double
+          description: Límite diario para retiros
+          example: 1000.00
+        dailyPurchaseLimit:
+          type: number
+          format: double
+          description: Límite diario para compras
+          example: 5000.00
+        expirationDate:
+          type: string
+          format: date
+          description: Fecha de expiración de la tarjeta
+          example: "2025-12-31"
 
     CreditBalanceResponse:
       type: object
@@ -576,7 +755,7 @@ components:
     CreditTypeEnum:
       type: string
       description: Tipo de producto de crédito
-      enum: [ PRESTAMO_PERSONAL, PRESTAMO_EMPRESARIAL, TARJETA_CREDITO ]
+      enum: [ PRESTAMO_PERSONAL, PRESTAMO_EMPRESARIAL, TARJETA_CREDITO, TARJETA_DEBITO ]
       example: PRESTAMO_PERSONAL
 
     CreditStatusEnum:
@@ -613,6 +792,178 @@ components:
         transactionsCount:
           type: integer
           example: 3
+
+    ThirdPartyPaymentRequest:
+      type: object
+      required:
+        - amount
+        - paymentDate
+        - payerCustomerId
+      properties:
+        amount:
+          type: number
+          format: double
+          minimum: 0
+          description: Amount of the payment
+          example: 500.00
+        paymentDate:
+          type: string
+          format: date
+          description: Date of the payment
+          example: "2024-01-15"
+        payerCustomerId:
+          type: string
+          description: ID of the customer making the payment
+          example: "68f9a324386cd871f5082aa1"
+        description:
+          type: string
+          description: Description of the payment
+          example: "Third party payment from family member"
+
+    DebitCardBalanceResponse:
+      type: object
+      description: Respuesta de saldo de tarjeta de débito
+      properties:
+        cardId:
+          type: string
+          description: ID de la tarjeta de débito
+          example: "507f1f77bcf86cd799439022"
+        mainAccountId:
+          type: string
+          description: ID de la cuenta principal
+          example: "507f1f77bcf86cd799439011"
+        balance:
+          type: number
+          format: double
+          description: Saldo actual de la cuenta principal
+          example: 1500.50
+        currency:
+          type: string
+          description: Código de moneda
+          example: "PEN"
+        lastUpdate:
+          type: string
+          format: date-time
+          description: Última actualización de saldo
+          example: "2024-01-15T10:30:00Z"
+
+    DebitCardAccountsUpdateRequest:
+      type: object
+      description: Solicitud para actualizar cuentas asociadas a tarjeta de débito
+      properties:
+        mainAccountId:
+          type: string
+          description: ID de la nueva cuenta principal
+          example: "507f1f77bcf86cd799439011"
+        associatedAccountIds:
+          type: array
+          description: IDs de cuentas adicionales asociadas
+          items:
+            type: string
+          example: ["acc123", "acc456"]
+
+    RecentCardTransactionsResponse:
+      type: object
+      description: Respuesta de transacciones recientes de tarjetas
+      properties:
+        customerId:
+          type: string
+          description: ID del cliente
+          example: "507f1f77bcf86cd799439011"
+        debitCardTransactions:
+          type: array
+          description: Últimas 10 transacciones de tarjetas de débito
+          items:
+            $ref: '#/components/schemas/CardTransaction'
+        creditCardTransactions:
+          type: array
+          description: Últimas 10 transacciones de tarjetas de crédito
+          items:
+            $ref: '#/components/schemas/CardTransaction'
+
+    CardTransaction:
+      type: object
+      description: Transacción de tarjeta
+      properties:
+        id:
+          type: string
+          description: ID de la transacción
+          example: "txn123"
+        cardId:
+          type: string
+          description: ID de la tarjeta
+          example: "507f1f77bcf86cd799439022"
+        cardType:
+          type: string
+          enum: [DEBITO, CREDITO]
+          description: Tipo de tarjeta
+          example: "DEBITO"
+        amount:
+          type: number
+          format: double
+          description: Monto de la transacción
+          example: 150.75
+        description:
+          type: string
+          description: Descripción de la transacción
+          example: "Compra en supermercado"
+        date:
+          type: string
+          format: date-time
+          description: Fecha de la transacción
+          example: "2024-01-15T10:30:00Z"
+        merchant:
+          type: string
+          description: Comercio donde se realizó la transacción
+          example: "Supermercado XYZ"
+
+    DebitCardMainAccountBalanceResponse:
+      type: object
+      description: Respuesta de saldo de cuenta principal de tarjeta de débito
+      properties:
+        cardId:
+          type: string
+          description: ID de la tarjeta de débito
+          example: "507f1f77bcf86cd799439022"
+        cardNumber:
+          type: string
+          description: Número de la tarjeta de débito
+          example: "DEB202400000001"
+        cardStatus:
+          type: string
+          description: Estado de la tarjeta
+          example: "ACTIVA"
+        mainAccountId:
+          type: string
+          description: ID de la cuenta principal
+          example: "507f1f77bcf86cd799439011"
+        accountNumber:
+          type: string
+          description: Número de la cuenta principal
+          example: "001-123456789"
+        accountType:
+          type: string
+          description: Tipo de cuenta
+          example: "AHORRO"
+        currentBalance:
+          type: number
+          format: double
+          description: Saldo actual de la cuenta principal
+          example: 1500.50
+        availableBalance:
+          type: number
+          format: double
+          description: Saldo disponible de la cuenta principal
+          example: 1500.50
+        currency:
+          type: string
+          description: Código de moneda
+          example: "PEN"
+        lastUpdated:
+          type: string
+          format: date-time
+          description: Última actualización de saldo
+          example: "2024-01-15T10:30:00Z"
 
   responses:
     BadRequest:
