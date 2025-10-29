@@ -15,10 +15,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -299,6 +302,49 @@ public class CreditServiceImpl implements CreditService {
                 })
                 .doOnSuccess(response -> log.info("Main account balance retrieved for debit card: {}", cardId))
                 .doOnError(error -> log.error("Error retrieving main account balance: {}", error.getMessage()));
+    }
+
+    @Override
+    public Mono<CreditValidationResult> validateCreditForTransaction(String creditId, BigDecimal requiredAmount) {
+        return creditRepository.findById(creditId)
+                .switchIfEmpty(Mono.error(new RuntimeException("Credit not found: " + creditId)))
+                .flatMap(credit -> {
+                    // 2. Validar que esté ACTIVO
+                    if (!"ACTIVO".equals(credit.getStatus())) {
+                        return Mono.just(new CreditValidationResult(false, "Credit is not active", BigDecimal.ZERO));
+                    }
+
+                    // 3. Validar cuenta principal
+                    if (credit.getMainAccountId() == null) {
+                        return Mono.just(new CreditValidationResult(false, "No main account associated", BigDecimal.ZERO));
+                    }
+
+                    // 4. Consultar cuenta
+                    return accountServiceClient.getAccountById(credit.getMainAccountId())
+                            .flatMap(account -> {
+                                // 5. Validar que la cuenta esté ACTIVA
+                                if (!"ACTIVO".equals(account.getStatus())) {
+                                    return Mono.just(new CreditValidationResult(false, "Account is not active", BigDecimal.valueOf(account.getBalance())));
+                                }
+
+                                // 6. Validar saldo
+                                if (account.getBalance().compareTo(requiredAmount.doubleValue()) < 0) {
+                                    return Mono.just(new CreditValidationResult(false, "Insufficient balance", BigDecimal.valueOf(account.getBalance())));
+                                }
+
+                                return Mono.just(new CreditValidationResult(true, "Validation successful", BigDecimal.valueOf(account.getBalance())));
+                            })
+                            .onErrorResume(error ->
+                                    Mono.just(new CreditValidationResult(false, "Error consulting account: " + error.getMessage(), BigDecimal.ZERO))
+                            );
+                })
+                .onErrorResume(error ->
+                        Mono.just(new CreditValidationResult(false, "Error validating credit: " + error.getMessage(), BigDecimal.ZERO))
+                )
+                .doOnSuccess(result ->
+                        log.info("Credit validation completed - CreditId: {}, Valid: {}, Reason: {}",
+                                creditId, result.isValid(), result.getReason())
+                );
     }
 
     private DebitCardMainAccountBalanceResponse createDebitCardBalanceResponse(

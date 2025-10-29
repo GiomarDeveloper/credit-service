@@ -4,6 +4,9 @@ import com.bank.credit.model.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.math.BigDecimal;
+import java.util.concurrent.CompletableFuture;
+
 public interface CreditService {
     Flux<CreditResponse> getAllCredits(String customerId, String creditType);
     Mono<CreditResponse> getCreditById(String id);
@@ -18,4 +21,5 @@ public interface CreditService {
     Mono<Boolean> hasOverdueCredits(String customerId);
     Mono<CreditResponse> makeThirdPartyPayment(String creditId, ThirdPartyPaymentRequest request);
     Mono<DebitCardMainAccountBalanceResponse> getDebitCardMainAccountBalance(String cardId);
+    Mono<CreditValidationResult> validateCreditForTransaction(String creditId, BigDecimal requiredAmount);
 }
